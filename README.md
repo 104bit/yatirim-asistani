@@ -113,6 +113,19 @@ yatirim-asistani/
 4. **Reflection Node**: Cevap kalitesini değerlendirir
 5. **Final Report**: Onaylanan raporu kullanıcıya sunar
 
+```mermaid
+flowchart LR
+    A[Kullanıcı Sorusu] --> B[Query Rewriter]
+    B --> C[Agent Node]
+    C --> D{Tool Gerekli?}
+    D -->|Evet| E[Tool Node]
+    E --> C
+    D -->|Hayır| F[Reflection]
+    F --> G{Kaliteli mi?}
+    G -->|Hayır| C
+    G -->|Evet| H[Final Rapor]
+```
+
 ### LLM Desteği
 - Google Gemini (gemini-2.5-flash)
 - OpenRouter (GPT-4o-mini)
