@@ -116,14 +116,14 @@ yatirim-asistani/
 ```mermaid
 flowchart LR
     A[Kullanıcı Sorusu] --> B[Query Rewriter]
-    B --> C[Agent Node]
-    C --> D{Tool Gerekli?}
-    D -->|Evet| E[Tool Node]
+    B --> C[LLM Agent]
+    C --> D{Tool Çağrısı?}
+    D -->|Evet| E[Tool Çalıştır]
     E --> C
-    D -->|Hayır| F[Reflection]
-    F --> G{Kaliteli mi?}
+    D -->|Hayır| F[LLM Reflection]
+    F --> G{Yeterli mi?}
     G -->|Hayır| C
-    G -->|Evet| H[Final Rapor]
+    G -->|Evet| H[Rapor]
 ```
 
 ### LLM Desteği
