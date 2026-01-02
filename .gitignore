@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# Generated reports
+*_report.md
+*_scout_output.json
+
 # Python
 __pycache__/
 *.py[cod]
