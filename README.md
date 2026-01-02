@@ -1,144 +1,150 @@
-# Financial Research Agent
+# Yatırım Asistanı
 
-A sophisticated AI-powered financial analysis system built with LangGraph and ReAct pattern for Turkish and global markets.
+LangGraph ve ReAct pattern kullanarak geliştirilmiş, yapay zeka destekli finansal analiz sistemi. Türkiye ve global piyasalar için kapsamlı yatırım araştırması yapar.
 
-## Features
+## Proje Hakkında
 
-- **ReAct Agent with Reflection** - Self-correcting agent that validates its own outputs
-- **8 Specialized Financial Tools** - Stock analysis, sector scanning, portfolio building, and more
-- **Turkish Language Support** - Native support for Turkish asset names and BIST stocks
-- **Multi-LLM Support** - Works with Google Gemini and OpenRouter (GPT-4o-mini)
-- **Scout Agent** - Automated market data and news collection
+Bu proje, kullanıcıların finansal sorularına veri odaklı cevaplar veren akıllı bir ajan sistemidir. Sistem şu temel prensiplerle çalışır:
 
-## Architecture
+- **Veri Odaklı**: Her raporda somut fiyat, değişim yüzdesi ve teknik göstergeler bulunur
+- **Araştırmacı**: Bilmediği konularda tahmin yapmaz, araştırır veya açıkça belirtir
+- **Proaktif**: Belirsiz sorularda bile en uygun araçları kullanarak analiz yapar
+- **Öz-Düzeltmeli**: Reflection mekanizması ile kendi cevaplarını değerlendirir ve gerekirse düzeltir
 
-```mermaid
-flowchart TD
-    A[User Query] --> B[Query Rewriter]
-    B --> C[ReAct Agent]
-    C --> D{Tool Needed?}
-    D -->|Yes| E[Tool Executor]
-    E --> F[analyze_stock]
-    E --> G[scan_sector]
-    E --> H[web_search]
-    E --> I[Other Tools...]
-    F --> C
-    G --> C
-    H --> C
-    I --> C
-    D -->|No| J[Draft Answer]
-    J --> K[Reflection]
-    K --> L{Quality OK?}
-    L -->|No| C
-    L -->|Yes| M[Final Report]
-```
+## Özellikler
 
-## Agent Flow
+### ReAct Agent
+Reasoning + Acting pattern'i ile çalışan ajan, önce düşünür sonra harekete geçer. LangGraph'ın `bind_tools` özelliği sayesinde native tool calling kullanır.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Agent
-    Agent --> Tools: tool calls detected
-    Tools --> Agent: results returned
-    Agent --> Reflection: draft ready
-    Reflection --> Agent: needs more work
-    Reflection --> [*]: approved
-```
+### 8 Finansal Araç
 
-## Quick Start
+| Araç | Açıklama | Örnek Kullanım |
+|------|----------|----------------|
+| `analyze_stock` | Hisse/emtia/kripto analizi | Fiyat, RSI, volatilite, sinyal |
+| `scan_sector` | Sektör taraması | Banka, holding, enerji, teknoloji |
+| `compare` | Varlık karşılaştırması | 2-3 hisseyi yan yana değerlendir |
+| `get_news` | Haber çekme | Şirket haberlerini topla |
+| `build_portfolio` | Portföy oluşturma | Belirli bütçeyi dağıt |
+| `get_forex` | Döviz kurları | USD/TRY, EUR/TRY |
+| `get_fundamentals` | Temel analiz | P/E, P/B, ROE oranları |
+| `web_search` | Web araması | Geçmiş veriler, trendler |
 
-### 1. Clone & Install
+### Scout Agent
+Piyasa verisi ve haber toplama için ayrı bir ajan modülü. Otomatik veri toplama ve temizleme işlevi görür.
+
+### Türkçe Dil Desteği
+Sistem Türkçe varlık isimlerini tanır:
+- "altın" → GC=F (Gold Futures)
+- "bitcoin" → BTC-USD
+- "thy" → THYAO.IS
+- "garanti" → GARAN.IS
+
+## Kurulum
+
+### Gereksinimler
+- Python 3.10+
+- API anahtarı (Google Gemini veya OpenRouter)
+
+### Adımlar
 
 ```bash
+# Projeyi klonlayın
 git clone https://github.com/104bit/yatirim-asistani.git
 cd yatirim-asistani
+
+# Bağımlılıkları yükleyin
 pip install -r requirements.txt
-```
 
-### 2. Set Up API Keys
-
-Copy the example environment file and add your API keys:
-
-```bash
+# Ortam değişkenlerini ayarlayın
 cp .env.example .env
 ```
 
-Edit `.env` and add at least one API key:
-- `GOOGLE_API_KEY` - For Google Gemini
-- `OPENROUTER_API_KEY` - For OpenRouter (GPT-4o-mini)
-
-### 3. Run
-
-```bash
-# Single query
-python research.py "Altın alınır mı?"
-
-# Interactive mode
-python research.py --interactive
+`.env` dosyasını düzenleyip en az bir API anahtarı ekleyin:
+```
+GOOGLE_API_KEY=sizin_google_api_anahtariniz
+OPENROUTER_API_KEY=sizin_openrouter_api_anahtariniz
 ```
 
-## Available Tools
+## Kullanım
 
-| Tool | Description |
-|------|-------------|
-| `analyze_stock` | Complete stock analysis with price, technicals, and signals |
-| `scan_sector` | Analyze entire sector, return top 3 picks |
-| `compare` | Compare 2-3 stocks side by side |
-| `get_news` | Get recent news headlines for a company |
-| `build_portfolio` | Allocate investment across stocks |
-| `get_forex` | Currency exchange rates (USDTRY, EURTRY) |
-| `get_fundamentals` | P/E, P/B, ROE ratios |
-| `web_search` | Search for market trends and historical data |
-
-## Project Structure
-
-```mermaid
-graph LR
-    subgraph Core
-        A[react_agent.py] --> B[llm_client.py]
-        A --> C[tools/market_tools.py]
-    end
-    subgraph Entry
-        D[research.py] --> A
-    end
-    subgraph Scout
-        E[scout/agent.py] --> F[market.py]
-        E --> G[news.py]
-        E --> H[scrubber.py]
-    end
-    subgraph Tests
-        I[tests/] --> A
-        I --> C
-    end
+### Tek Sorgu
+```bash
+py research.py "Altın alınır mı?"
 ```
 
-## Testing
+### İnteraktif Mod
+```bash
+py research.py --interactive
+```
+
+Örnek sorular:
+- "Bitcoin alınır mı?"
+- "Banka sektörü nasıl?"
+- "THYAO vs SAHOL karşılaştır"
+- "100.000 TL ile portföy oluştur"
+- "2024'te en çok kazandıran hisseler"
+- "Dolar kuru nedir?"
+
+## Proje Yapısı
+
+```
+yatirim-asistani/
+├── react_agent.py      # Ana ReAct agent (bind_tools ile)
+├── llm_client.py       # LLM client wrapper
+├── research.py         # CLI giriş noktası
+├── tools/
+│   └── market_tools.py # 8 finansal araç tanımları
+├── scout/
+│   ├── agent.py        # Scout agent
+│   ├── market.py       # Piyasa verisi çekme
+│   ├── news.py         # Haber çekme (RSS)
+│   └── scrubber.py     # Veri temizleme
+├── tests/              # Pytest test dosyaları
+├── requirements.txt    # Bağımlılıklar
+└── .env.example        # Örnek ortam değişkenleri
+```
+
+## Teknik Detaylar
+
+### Ajan Akışı
+1. **Query Rewriter**: Kullanıcı sorusunu analiz eder ve optimize eder
+2. **Agent Node**: LLM ile düşünür, gerekirse tool çağırır
+3. **Tool Node**: Tool'ları çalıştırır, sonuçları döner
+4. **Reflection Node**: Cevap kalitesini değerlendirir
+5. **Final Report**: Onaylanan raporu kullanıcıya sunar
+
+### LLM Desteği
+- Google Gemini (gemini-2.5-flash)
+- OpenRouter (GPT-4o-mini)
+
+Sistem önce OpenRouter'ı, bulamazsa Google Gemini'yi kullanır.
+
+## Testler
 
 ```bash
-# Run all tests
+# Tüm testleri çalıştır
 pytest
 
-# Run with verbose output
+# Detaylı çıktı ile
 pytest -v
 
-# Run only unit tests
+# Sadece unit testler
 pytest -m unit
+
+# Sadece integration testler (API gerektirir)
+pytest -m integration
 ```
 
-## Example Queries
+## Kısıtlamalar
 
-```
-"Bitcoin alınır mı?"
-"Banka sektörü nasıl?"
-"THYAO vs SAHOL karşılaştır"
-"100.000 TL ile portföy oluştur"
-"2024'te en çok kazandıran hisseler"
-```
+- Gerçek zamanlı veri için yfinance kullanılır, bazen gecikmeli olabilir
+- Bazı BIST hisseleri için veri bulunamayabilir
+- API rate limit'lerine dikkat edilmelidir
 
-## Disclaimer
+## Yasal Uyarı
 
-This tool is for educational and research purposes only. Not financial advice. Always do your own research before making investment decisions.
+Bu araç sadece eğitim ve araştırma amaçlıdır. Yatırım tavsiyesi niteliği taşımaz. Yatırım kararlarınızı vermeden önce mutlaka kendi araştırmanızı yapın.
 
-## License
+## Lisans
 
 MIT License
