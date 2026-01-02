@@ -50,8 +50,8 @@ stateDiagram-v2
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/yourusername/marketplace-analysis.git
-cd marketplace-analysis
+git clone https://github.com/104bit/yatirim-asistani.git
+cd yatirim-asistani
 pip install -r requirements.txt
 ```
 
