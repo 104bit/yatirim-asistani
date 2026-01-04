@@ -1,4 +1,3 @@
-import threading
 import json
 import dataclasses
 from datetime import datetime
@@ -14,7 +13,6 @@ class ScoutAgent:
     def __init__(self):
         self.market_data = []
         self.news_data = []
-        self.lock = threading.Lock()
 
     def run(self, input_data: ScoutInput):
         """
@@ -57,8 +55,7 @@ class ScoutAgent:
         try:
             print(f"[Market Data] Fetching data for {input_data.symbol}...")
             data = fetch_market_data(input_data.symbol, input_data.start_time, input_data.end_time)
-            with self.lock:
-                self.market_data = data
+            self.market_data = data
             print(f"[Market Data] Fetched {len(data)} records.")
         except Exception as e:
             print(f"[Market Data] Error: {e}")
@@ -71,8 +68,7 @@ class ScoutAgent:
             print(f"[News] Cleaning {len(raw_news)} raw items...")
             cleaned = clean_news(raw_news, [input_data.target_company])
             
-            with self.lock:
-                self.news_data = cleaned
+            self.news_data = cleaned
             print(f"[News] Processed {len(cleaned)} relevant items.")
         except Exception as e:
             print(f"[News] Error: {e}")

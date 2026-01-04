@@ -217,6 +217,8 @@ def analyze_stock(symbol: str) -> Dict[str, Any]:
         }
         
         # Opsiyonel alanlar (varsa ekle)
+        if info.get("currency"):
+            result["para_birimi"] = info["currency"]
         if info.get("trailingPE"):
             result["pe"] = round(info["trailingPE"], 1)
         if info.get("marketCap"):
@@ -274,8 +276,9 @@ def scan_sector(sector: str) -> Dict[str, Any]:
             if h.empty: continue
             chg = ((h['Close'].iloc[-1] - h['Close'].iloc[0]) / h['Close'].iloc[0]) * 100
             results.append({"s": sym.replace(".IS",""), "p": round(float(h['Close'].iloc[-1]),1), "chg": f"{chg:+.1f}%"})
-        except:
-            pass
+        except Exception as e:
+            print(f"[scan_sector] {sym} hatası: {e}")
+            continue
     
     results.sort(key=lambda x: float(x["chg"].replace("%","").replace("+","")), reverse=True)
     return {"sector": sector, "top3": results[:3], "best": results[0]["s"] if results else "-"}
@@ -309,8 +312,9 @@ def compare(symbols: List[str]) -> Dict[str, Any]:
                 "chg": f"{chg:+.1f}%",
                 "pe": round(info.get("trailingPE",0),1) or "-"
             })
-        except:
-            pass
+        except Exception as e:
+            print(f"[compare] {sym} hatası: {e}")
+            continue
     
     if not results:
         return {"err": "No data"}
@@ -380,8 +384,9 @@ def build_portfolio(amount: float, symbols: List[str]) -> Dict[str, Any]:
             val = shares * p
             positions.append({"s": sym.replace(".IS",""), "qty": shares, "val": round(val,0)})
             total += val
-        except:
-            pass
+        except Exception as e:
+            print(f"[build_portfolio] {sym} hatası: {e}")
+            continue
     
     return {"positions": positions, "invested": round(total,0), "cash": round(amount-total,0)}
 

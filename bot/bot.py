@@ -1,0 +1,144 @@
+"""
+Telegram Bot for Financial Research Agent
+==========================================
+Webhook-based bot for Render deployment.
+"""
+
+import os
+import sys
+from dotenv import load_dotenv
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+load_dotenv()
+
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
+from react_agent import run_react_agent
+
+# Configuration
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "")
+
+app = Flask(__name__)
+
+
+def get_bot_app():
+    """Create Telegram application."""
+    return Application.builder().token(TELEGRAM_TOKEN).build()
+
+
+async def start_command(update: Update, context):
+    """Handle /start command."""
+    welcome_message = """
+🤖 **Finansal Araştırma Asistanı**
+
+Merhaba! Ben yatırım araştırma botuyum.
+
+**Örnek sorular:**
+• Altın alınır mı?
+• Bitcoin analizi yap
+• Banka sektörü nasıl?
+• THYAO vs SAHOL karşılaştır
+• Dolar kuru nedir?
+
+Herhangi bir finansal soru sorabilirsiniz!
+"""
+    await update.message.reply_text(welcome_message, parse_mode="Markdown")
+
+
+async def handle_message(update: Update, context):
+    """Handle user messages."""
+    user_message = update.message.text
+    chat_id = update.message.chat_id
+    
+    # Send typing indicator
+    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    
+    try:
+        # Run the financial research agent
+        report = run_react_agent(user_message)
+        
+        # Send response (split if too long)
+        if len(report) > 4000:
+            for i in range(0, len(report), 4000):
+                await update.message.reply_text(report[i:i+4000])
+        else:
+            await update.message.reply_text(report)
+            
+    except Exception as e:
+        error_msg = f"❌ Bir hata oluştu: {str(e)[:100]}"
+        await update.message.reply_text(error_msg)
+
+
+@app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
+def webhook():
+    """Handle incoming Telegram updates via webhook."""
+    import asyncio
+    
+    update = Update.de_json(request.get_json(), Bot(TELEGRAM_TOKEN))
+    
+    # Process update
+    bot_app = get_bot_app()
+    bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    asyncio.run(bot_app.process_update(update))
+    
+    return "OK", 200
+
+
+@app.route("/")
+def health():
+    """Health check endpoint."""
+    return "Bot is running!", 200
+
+
+@app.route("/set_webhook")
+def set_webhook():
+    """Set webhook URL."""
+    import asyncio
+    
+    if not WEBHOOK_URL:
+        return "RENDER_EXTERNAL_URL not set", 400
+    
+    webhook_url = f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}"
+    bot = Bot(TELEGRAM_TOKEN)
+    
+    async def set_hook():
+        await bot.set_webhook(webhook_url)
+    
+    asyncio.run(set_hook())
+    return f"Webhook set to {webhook_url}", 200
+
+
+if __name__ == "__main__":
+    # Local testing with polling
+    import asyncio
+    
+    print("Starting bot in polling mode (local testing)...")
+    
+    async def main():
+        app_bot = get_bot_app()
+        app_bot.add_handler(CommandHandler("start", start_command))
+        app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        await app_bot.initialize()
+        await app_bot.start()
+        await app_bot.updater.start_polling()
+        
+        print("Bot is running! Press Ctrl+C to stop.")
+        
+        # Keep running
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            await app_bot.stop()
+    
+    asyncio.run(main())
