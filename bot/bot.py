@@ -138,6 +138,7 @@ def webhook():
     update = Update.de_json(request.get_json(), Bot(TELEGRAM_TOKEN))
     
     async def process():
+        print("Webhook request received, initializing app...")
         # Create and initialize application
         bot_app = get_bot_app()
         bot_app.add_handler(CommandHandler("start", start_command))
