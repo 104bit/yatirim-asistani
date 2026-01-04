@@ -27,3 +27,7 @@ pytest>=8.0.0
 python-telegram-bot>=21.0
 flask>=3.0.0
 gunicorn>=21.0.0
+
+# Tavily
+langchain-community>=0.0.10
+tavily-python>=0.3.0

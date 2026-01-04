@@ -324,33 +324,155 @@ def compare(symbols: List[str]) -> Dict[str, Any]:
 
 
 # =============================================================================
-# TOOL 4: get_news (Company news headlines)
+# TOOL 4: get_news (Company news headlines - HYBRID TAVILY/RSS)
 # =============================================================================
 @tool
 def get_news(company: str) -> Dict[str, Any]:
     """
-    Get recent news headlines for a company.
+    Get recent news headlines and content for a company or asset.
+    Uses Tavily API for high-quality results if available, falls back to Google RSS.
     
     Args:
-        company: Company name (e.g., "Sabancı Holding", "THY")
+        company: Company/asset name (e.g., "Bitcoin", "THYAO", "Altın")
     """
+    import os
     import feedparser
+    from urllib.parse import quote
+    from datetime import datetime, timedelta
+    
     print(f"[get_news] {company}")
     
-    url = f"https://news.google.com/rss/search?q={company.replace(' ','+')}&hl=tr&gl=TR"
-    feed = feedparser.parse(url)
+    # 1. TRY TAVILY API FIRST (Better content)
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if tavily_key and "your_tavily_api_key_here" not in tavily_key:
+        try:
+            from tavily import TavilyClient
+            print(f"[get_news] Using Tavily for {company}")
+            
+            client = TavilyClient(api_key=tavily_key)
+            
+            # Smart query construction
+            search_query = f"{company} haberleri son durum finans piyasa"
+            if company.lower() in ["altın", "gold"]:
+                search_query = "ons altın gram altın fiyat analizi yorum"
+            elif company.lower() in ["bitcoin", "btc"]:
+                search_query = "bitcoin btc kripto para piyasa analizi"
+            
+            # Advanced search with news topic
+            response = client.search(
+                query=search_query,
+                search_depth="advanced",
+                topic="news",
+                max_results=5,
+                include_answer=False,
+                include_images=False
+            )
+            
+            results = response.get("results", [])
+            if results:
+                news_data = []
+                for res in results:
+                    news_data.append({
+                        "title": res.get("title", ""),
+                        "url": res.get("url", ""),
+                        "content": res.get("content", "")[:200] + "...",
+                        "score": res.get("score"),
+                        "date": res.get("published_date", "Güncel")
+                    })
+                
+                # Simple sentiment on content
+                positive_words = ["yükseliş", "artış", "rekor", "kâr", "olumlu", "boğa", "kazanç", "fırsat"]
+                negative_words = ["düşüş", "zarar", "kriz", "risk", "olumsuz", "ayı", "kayıp", "satış"]
+                
+                all_text = " ".join([n["content"].lower() + n["title"].lower() for n in news_data])
+                pos_count = sum(1 for w in positive_words if w in all_text)
+                neg_count = sum(1 for w in negative_words if w in all_text)
+                
+                sent_score = "0"
+                sentiment = "NÖTR"
+                if pos_count > neg_count:
+                    sent_score = f"+{pos_count - neg_count}"
+                    sentiment = "OLUMLU"
+                elif neg_count > pos_count:
+                    sent_score = f"-{neg_count - pos_count}"
+                    sentiment = "OLUMSUZ"
+                
+                return {
+                    "asset": company,
+                    "source": "Tavily API (High Quality)",
+                    "news": [f"{n['title']} ({n['date']})" for n in news_data],
+                    "summaries": [n["content"] for n in news_data[:3]],
+                    "sentiment": sentiment,
+                    "sentiment_score": sent_score,
+                    "urls": [n["url"] for n in news_data[:3]]
+                }
+                
+        except Exception as e:
+            print(f"[get_news] Tavily error: {e}, falling back to RSS")
+            # Fallthrough to RSS
+            pass
+
+    # 2. FALLBACK TO GOOGLE RSS (Free, robust)
+    print(f"[get_news] Using RSS Fallback for {company}")
     
-    headlines = [e.get("title", "")[:80] for e in feed.entries[:5]]
+    # Map common Turkish names to search-friendly versions
+    ASSET_KEYWORDS = {
+        "bitcoin": "Bitcoin BTC kripto",
+        "btc": "Bitcoin BTC kripto",
+        "altın": "Altın altın fiyatı gram",
+        "altin": "Altın altın fiyatı gram",
+        "dolar": "Dolar USD TL kur",
+        "euro": "Euro EUR TL kur",
+        "gümüş": "Gümüş gümüş fiyatı ons",
+        "petrol": "Petrol brent ham petrol",
+    }
     
-    # Simple sentiment
-    pos = ["kâr", "artış", "büyüme", "rekor", "yükseliş"]
-    neg = ["zarar", "düşüş", "kriz", "risk", "satış"]
+    # Get enhanced search term
+    search_term = ASSET_KEYWORDS.get(company.lower().strip(), company)
+    financial_keywords = "fiyat piyasa yatırım"
+    search_query = f"{search_term} {financial_keywords}"
+    encoded_query = quote(search_query, safe='')
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=tr&gl=TR&ceid=TR:tr"
     
-    score = sum(1 for h in headlines for w in pos if w in h.lower())
-    score -= sum(1 for h in headlines for w in neg if w in h.lower())
-    sent = "+" if score > 0 else "-" if score < 0 else "0"
-    
-    return {"news": headlines[:3], "sent": sent}
+    try:
+        feed = feedparser.parse(url)
+        
+        # Filter for relevancy
+        relevancy_terms = company.lower().split() + search_term.lower().split()[:2]
+        
+        relevant_headlines = []
+        for entry in feed.entries[:10]:
+            title = entry.get("title", "")
+            if any(term in title.lower() for term in relevancy_terms):
+                if " - " in title:
+                    headline, source = title.rsplit(" - ", 1)
+                else:
+                    headline, source = title, "Bilinmeyen"
+                relevant_headlines.append({"title": headline, "source": source})
+            if len(relevant_headlines) >= 5: break
+        
+        # Sentiment
+        positive_words = ["kâr", "artış", "büyüme", "rekor", "yükseliş", "kazanç", "ralli"]
+        negative_words = ["zarar", "düşüş", "kriz", "risk", "satış", "kaybetti", "geriledi"]
+        
+        all_text = " ".join([h["title"].lower() for h in relevant_headlines])
+        pos_count = sum(1 for w in positive_words if w in all_text)
+        neg_count = sum(1 for w in negative_words if w in all_text)
+        
+        sent = "OLUMLU" if pos_count > neg_count else "OLUMSUZ" if neg_count > pos_count else "NÖTR"
+        
+        news_list = [h["title"] for h in relevant_headlines[:3]]
+        
+        return {
+            "asset": company,
+            "source": "Google RSS (Basliklar)",
+            "news": news_list if news_list else ["İlgili haber bulunamadı"],
+            "sentiment": sent,
+            "note": "Detayli icerik icin Tavily API key ekleyin"
+        }
+        
+    except Exception as e:
+        return {"error": str(e), "asset": company}
 
 
 # =============================================================================

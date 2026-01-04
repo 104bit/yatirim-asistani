@@ -26,6 +26,30 @@ WEBHOOK_URL = os.getenv("RENDER_EXTERNAL_URL", "")
 app = Flask(__name__)
 
 
+def format_for_telegram(text: str) -> str:
+    """
+    Convert standard markdown to Telegram-compatible format.
+    Telegram uses a simpler markdown syntax.
+    """
+    import re
+    
+    # Remove ### headings, keep text
+    text = re.sub(r'^###\s*', '📊 ', text, flags=re.MULTILINE)
+    text = re.sub(r'^##\s*', '📈 ', text, flags=re.MULTILINE)
+    text = re.sub(r'^#\s*', '🔹 ', text, flags=re.MULTILINE)
+    
+    # Convert **bold** to *bold* (Telegram style)
+    text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+    
+    # Remove code blocks markers
+    text = re.sub(r'```[a-z]*\n?', '', text)
+    
+    # Clean up extra newlines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
+
 def get_bot_app():
     """Create Telegram application."""
     return Application.builder().token(TELEGRAM_TOKEN).build()
@@ -88,12 +112,15 @@ async def handle_message(update: Update, context):
         # Delete status message
         await status_msg.delete()
         
+        # Format report for Telegram
+        formatted_report = format_for_telegram(report)
+        
         # Send final response (split if too long)
-        if len(report) > 4000:
-            for i in range(0, len(report), 4000):
-                await update.message.reply_text(report[i:i+4000])
+        if len(formatted_report) > 4000:
+            for i in range(0, len(formatted_report), 4000):
+                await update.message.reply_text(formatted_report[i:i+4000])
         else:
-            await update.message.reply_text(report)
+            await update.message.reply_text(formatted_report)
             
     except Exception as e:
         # Update status with error

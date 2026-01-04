@@ -39,7 +39,8 @@ class AgentState(TypedDict):
 # =============================================================================
 # SYSTEM PROMPT (Updated - no <tool> format needed)
 # =============================================================================
-REACT_SYSTEM_PROMPT = """Sen Türkiye'nin en iyi Finansal Araştırma Ajansısın.
+REACT_SYSTEM_PROMPT = f"""Sen Türkiye'nin en iyi Finansal Araştırma Ajansısın.
+Bugünün tarihi: {datetime.now().strftime('%d %B %Y')}
 
 ## TEMEL PRENSİPLER
 1. **SOMUT VERİ** → Her raporda fiyat, değişim, RSI gibi sayılar olmalı
@@ -47,13 +48,21 @@ REACT_SYSTEM_PROMPT = """Sen Türkiye'nin en iyi Finansal Araştırma Ajansısı
 3. **PROAKTİF OL** → Belirsiz sorularda bile araştır, pasif kalma
 4. **NİYETİ ANLA** → Kullanıcının gerçek amacını çöz, en uygun tool'u seç
 
+## ÖNEMLİ: ÇALIŞMA PRENSİBİ
+Hazırladığın cevap kullanıcıya GİTMEYECEK. Önce katı bir "REFLECTION AGENT" (Denetçi) tarafından kontrol edilecek.
+Denetçi sana eksiklerini söyleyip tekrar iş yaptıracak.
+BU YÜZDEN:
+- Kullanıcıya ASLA soru sorma (Denetçi cevap veremez).
+- Eksik bilgi olsa bile elindeki verilerle EN İYİ TASLAK RAPORU hazırla.
+- "Spesifik konu belirtin" demek yerine, genel bir analiz yap.
+
 ## ARAÇLARIN
 | Araç | Ne Zaman Kullan |
 |------|-----------------|
 | analyze_stock(symbol) | Spesifik varlık analizi (altın, bitcoin, THYAO vb.) |
-| get_news(company) | Haber ve sentiment için |
+| get_news(company) | Haberler, piyasa yorumları ve sentiment analizi için (ÖNCELİKLİ) |
 | scan_sector(sector) | Sektör karşılaştırması (banka, holding, enerji) |
-| web_search(query) | Belirsiz sorgular, geçmiş veriler, trend araştırması |
+| web_search(query) | Sadece veri bulunamazsa kullan |
 | compare(symbols) | 2-3 varlık karşılaştırması |
 | get_forex(pair) | Döviz kurları (USDTRY, EURTRY) |
 
@@ -96,33 +105,31 @@ Her raporda şunlar olmalı:
 - Net tavsiye (AL/SAT/TUT) + gerekçe
 """
 
-REFLECTION_PROMPT = """Aşağıdaki cevabı değerlendir:
+REFLECTION_PROMPT = """Sen KIDEMLİ BİR FİNANS EDİTÖRÜSÜN.
+Görevin: Hazırlanan yatırım raporunu kontrol etmek ve yayına uygun olup olmadığına karar vermek.
+Amacın mükemmel değil, "yeterli ve doğru" bilgi sunmak.
 
 KULLANICI SORUSU: {query}
 
-MEVCUT CEVAP:
+TASLAK Rapor:
 {answer}
 
-## DEĞERLENDİRME KRİTERLERİ
+## KONTROL LİSTESİ (Checklist)
 
-### KABUL EDİLEBİLİR CEVAPLAR:
+1. **Fiyat Bilgisi:** Raporda herhangi bir fiyat veya değer geçiyor mu?
+2. **Yönlendirme:** Okuyucuya bir fikir (pozitif/negatif) veriyor mu?
+3. **Akış:** Rapor anlaşılır mı?
 
-**Senaryo A - Veri ile cevap:**
-1. Somut FİYAT değeri var mı? (örn: "4.52 USD", "23.82 TL")
-2. DEĞİŞİM yüzdesi var mı? (örn: "+2.1%", "-0.7%")
-3. Net TAVSİYE var mı? (AL/SAT/TUT veya Türkçe karşılığı)
-4. HABER/SENTİMENT bilgisi var mı?
-
-**Senaryo B - Geçerli RED cevabı:**
-- "bulunamadı", "mevcut değil", "geçerli değil" ifadesi var mı?
-- Fantezi/hayali sorgu reddi var mı? (Mars, gelecek tahmini yapılamaz vb.)
-- "Bu sorgu gerçek bir finansal varlık içermiyor" gibi açıklama var mı?
+---
 
 ## KARAR
-- Senaryo A veya Senaryo B karşılanıyorsa → "TAMAM" yaz
-- Her iki senaryo da karşılanmıyorsa → "DEVAM: analyze_stock çağır" yaz
 
-Sadece TAMAM veya DEVAM: yazısıyla cevap ver, başka bir şey yazma.
+Eğer rapor genel olarak makul ve kullanıcıya faydalıysa:
+"TAMAM" yaz.
+Eğer KRİTİK bir eksik varsa (örneğin hiç fiyat yoksa):
+"DEVAM: [eksik veriyi alacak tool]" formatında komut ver.
+
+Gereksiz detaylara takılma.
 """
 
 
@@ -180,7 +187,7 @@ def get_llm():
     
     if openrouter_key:
         return ChatOpenAI(
-            model="openai/gpt-4o-mini-2024-07-18",
+            model="xiaomi/mimo-v2-flash:free",
             openai_api_key=openrouter_key,
             openai_api_base="https://openrouter.ai/api/v1",
             temperature=0.3,
@@ -292,7 +299,7 @@ def reflection_node(state: AgentState) -> AgentState:
         return {
             "messages": state["messages"],
             "needs_more_work": True,
-            "draft_answer": "",
+            "draft_answer": state["draft_answer"],
             "final_report": "",
             "iteration": state["iteration"],
             "user_query": state["user_query"]
@@ -317,7 +324,7 @@ def should_continue(state: AgentState) -> str:
     if messages:
         last = messages[-1]
         if hasattr(last, 'tool_calls') and last.tool_calls:
-            if state.get("iteration", 0) < 5:
+            if state.get("iteration", 0) < 3:
                 return "tools"
     
     # No tool calls and no draft - check content
@@ -336,7 +343,7 @@ def after_reflection(state: AgentState) -> str:
     """Route after reflection."""
     if state.get("final_report"):
         return "end"
-    if state.get("needs_more_work") and state.get("iteration", 0) < 5:
+    if state.get("needs_more_work") and state.get("iteration", 0) < 3:
         return "agent"
     # Max iterations reached - use whatever we have
     if not state.get("final_report"):
@@ -385,8 +392,9 @@ def run_react_agent(user_query: str) -> str:
     print("="*50)
     print(f"Original Query: {user_query}")
     
-    # Pre-LLM: Rewrite query
-    rewritten_query = rewrite_query(user_query)
+    # Pre-LLM: Rewrite query (DISABLED for optimization)
+    # rewritten_query = rewrite_query(user_query)
+    rewritten_query = user_query
     
     print("="*50)
     
@@ -404,6 +412,21 @@ def run_react_agent(user_query: str) -> str:
     print("="*50)
     
     report = result.get("final_report", "")
+    
+    # Fallback if no final report
+    if not report:
+        report = result.get("draft_answer", "")
+        if not report:
+            # Last resort: use last message content
+            messages = result.get("messages", [])
+            if messages:
+                last_msg = messages[-1]
+                if hasattr(last_msg, 'content'):
+                    report = last_msg.content
+    
+    if not report:
+        report = "Rapor oluşturulamadı. (Iterasyon limiti veya teknik hata)"
+        
     print(report)
     return report
 
