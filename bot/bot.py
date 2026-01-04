@@ -51,18 +51,44 @@ Herhangi bir finansal soru sorabilirsiniz!
 
 
 async def handle_message(update: Update, context):
-    """Handle user messages."""
+    """Handle user messages with progress updates."""
     user_message = update.message.text
     chat_id = update.message.chat_id
     
-    # Send typing indicator
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    # Send initial status message
+    status_msg = await update.message.reply_text(
+        "🔍 *Sorgunuz analiz ediliyor...*",
+        parse_mode="Markdown"
+    )
     
     try:
+        # Update status - analyzing query
+        await status_msg.edit_text(
+            "🧠 *Düşünüyorum...*\n\n"
+            f"📝 Soru: _{user_message}_",
+            parse_mode="Markdown"
+        )
+        
+        # Send typing indicator
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        
+        # Update status - working
+        await status_msg.edit_text(
+            "⚙️ *Veri topluyorum ve analiz ediyorum...*\n\n"
+            f"📝 Soru: _{user_message}_\n\n"
+            "🔹 Piyasa verileri çekiliyor\n"
+            "🔹 Haberler taranıyor\n"
+            "🔹 Teknik analiz yapılıyor",
+            parse_mode="Markdown"
+        )
+        
         # Run the financial research agent
         report = run_react_agent(user_message)
         
-        # Send response (split if too long)
+        # Delete status message
+        await status_msg.delete()
+        
+        # Send final response (split if too long)
         if len(report) > 4000:
             for i in range(0, len(report), 4000):
                 await update.message.reply_text(report[i:i+4000])
@@ -70,8 +96,11 @@ async def handle_message(update: Update, context):
             await update.message.reply_text(report)
             
     except Exception as e:
-        error_msg = f"❌ Bir hata oluştu: {str(e)[:100]}"
-        await update.message.reply_text(error_msg)
+        # Update status with error
+        await status_msg.edit_text(
+            f"❌ *Bir hata oluştu*\n\n`{str(e)[:100]}`",
+            parse_mode="Markdown"
+        )
 
 
 @app.route(f"/{TELEGRAM_TOKEN}", methods=["POST"])
@@ -81,12 +110,21 @@ def webhook():
     
     update = Update.de_json(request.get_json(), Bot(TELEGRAM_TOKEN))
     
-    # Process update
-    bot_app = get_bot_app()
-    bot_app.add_handler(CommandHandler("start", start_command))
-    bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    async def process():
+        # Create and initialize application
+        bot_app = get_bot_app()
+        bot_app.add_handler(CommandHandler("start", start_command))
+        bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        # Initialize before processing
+        await bot_app.initialize()
+        
+        try:
+            await bot_app.process_update(update)
+        finally:
+            await bot_app.shutdown()
     
-    asyncio.run(bot_app.process_update(update))
+    asyncio.run(process())
     
     return "OK", 200
 
